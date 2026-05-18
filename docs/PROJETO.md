@@ -10,6 +10,40 @@ Mensagem principal da marca:
 
 "Venda mais no WhatsApp sem perder clientes."
 
+## Status Atual da Construcao
+
+Data de referencia:
+
+- 17/05/2026
+
+Estado atual do projeto:
+
+- landing page e painel com linguagem visual mobile-first e versao web refinada;
+- autenticacao da loja funcionando;
+- base multi-tenant ativa por conta/loja;
+- onboarding inicial da operacao funcionando;
+- catalogo com cadastro, busca e edicao;
+- conversas com persistencia real em Supabase;
+- funil comercial inicial e handoff humano funcionando;
+- estrutura preparada para mensagens por texto e audio;
+- webhook e simulacao de WhatsApp preparados para a fase operacional.
+
+O que ja esta implementado no MVP:
+
+- Supabase como banco principal para usuarios, produtos, conversas, mensagens e leads;
+- painel de conversas com timeline, status, reserva e atendimento manual;
+- automacoes basicas de funil por conversa;
+- retorno manual da conversa para a IA;
+- base para detectar quando o vendedor respondeu pelo numero oficial da Cloud API;
+- experiencia mobile e desktop ajustada para parecer produto de verdade, nao so prototipo.
+
+O que ainda nao esta concluido:
+
+- interpretacao real de audio com transcricao;
+- integracao de LLM externo para respostas mais contextuais;
+- operacao completa em ambiente real da WhatsApp Cloud API;
+- regras comerciais configuraveis por loja.
+
 ## Problema Que o Produto Resolve
 
 Muitas lojas no Brasil usam o WhatsApp como principal canal de vendas, mas enfrentam gargalos diarios:
@@ -201,7 +235,8 @@ Hospedagem:
 
 IA:
 
-- Gemini API inicialmente
+- logica local de IA ja ativa no MVP
+- proxima camada prevista: Gemini API para entendimento e resposta contextual
 - arquitetura preparada para OpenAI no futuro
 
 Canal:
@@ -226,6 +261,17 @@ Entrada manual inicial de catalogo, preco, estoque e dados relevantes.
 
 Camada que interpreta mensagem, contexto, intencao e proximo passo da conversa.
 
+Estado atual:
+
+- motor local ja interpreta contexto e estagio comercial;
+- classifica urgencia e foco operacional;
+- respeita handoff humano;
+- usa fallback deterministico para nao quebrar o MVP.
+
+Proximo passo:
+
+- integrar Gemini para leitura mais profunda de contexto e redacao de respostas.
+
 ### 5. Consulta de estoque
 
 Busca dados do produto e ajuda a IA a responder com seguranca.
@@ -238,9 +284,38 @@ Registra interesse do cliente e separacao do item.
 
 Permite acompanhar atendimento, assumir conversa e visualizar historico.
 
+Estado atual:
+
+- lista, filtros, timeline e simulacao funcionando;
+- conversas nascem recolhidas por padrao;
+- handoff humano e retorno para IA ja operam no painel.
+
 ### 8. Configuracoes da loja
 
 Dados basicos da operacao, horarios, politicas e parametros.
+
+Estado atual:
+
+- dados basicos da loja e canal sendo persistidos;
+- horarios e politicas comerciais ainda precisam evoluir.
+
+## Proximo Passo Imediato
+
+O proximo passo do projeto e conectar o Gemini como camada de inteligencia mais forte, sem remover a logica local atual.
+
+Objetivo:
+
+- melhorar interpretacao de contexto;
+- melhorar respostas em casos ambiguos;
+- entender melhor saudacoes, horarios, pedidos tecnicos e negociacao;
+- manter fallback local quando o Gemini falhar.
+
+Arquitetura desejada:
+
+- classificar intencao e estagio com Gemini;
+- gerar resposta sugerida com Gemini;
+- usar contexto da conversa, dados da loja, horario, catalogo relevante e status operacional;
+- cair para a logica local atual em caso de indisponibilidade ou erro.
 
 ## Diretrizes de UX e Marca
 

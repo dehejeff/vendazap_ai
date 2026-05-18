@@ -27,6 +27,33 @@ A pergunta central continua sendo:
 
 Se a resposta for fraca, nao e prioridade.
 
+## Estado Atual do Produto
+
+Data de referencia:
+
+- 17/05/2026
+
+O VendaZap AI ja saiu da fase de conceito visual e entrou numa base funcional de MVP.
+
+Hoje o produto ja tem:
+
+- autenticacao;
+- estrutura multi-tenant;
+- onboarding de loja;
+- catalogo com persistencia real;
+- painel de conversas;
+- funil comercial inicial;
+- atendimento humano com pausa da IA;
+- Supabase como banco principal;
+- base de webhook e simulacao para WhatsApp;
+- preparacao estrutural para mensagens por audio.
+
+O principal gargalo deixou de ser front e passou a ser inteligencia operacional.
+
+Por isso, o proximo passo prioritario mudou para:
+
+- integrar Gemini para melhorar entendimento de contexto e respostas.
+
 ## Principios de Priorizacao
 
 Antes de construir qualquer funcionalidade, precisamos perguntar:
@@ -74,6 +101,14 @@ No inicio, a promessa precisa ser objetiva e realista:
 - reserva de produtos;
 - opcao de atendimento humano assumir a conversa.
 
+O que ja esta efetivamente implementado nesta etapa:
+
+- persistencia em Supabase para usuarios, produtos, conversas, mensagens e leads;
+- painel refinado para mobile e desktop;
+- catalogo com busca e edicao;
+- estagios comerciais no painel;
+- handoff humano com retorno manual para IA.
+
 ### O que o MVP nao promete ainda
 
 No inicio, precisamos vender o produto sem inflar expectativa.
@@ -84,12 +119,16 @@ Por isso, o MVP nao deve prometer:
 - importacao em massa no primeiro momento;
 - analytics profundos;
 - automacoes comerciais avancadas;
-- interpretacao de pedidos por audio no inicio;
 - voz;
 - omnichannel;
 - campanhas automaticas;
 - gestao complexa de equipe;
 - operacao enterprise.
+
+Atualizacao importante:
+
+- a base para audio ja entrou no produto;
+- o que ainda nao pode ser prometido e a transcricao real e a interpretacao comercial madura desse audio.
 
 ## Como o MVP Deve Ser Posicionado Comercialmente
 
@@ -175,6 +214,12 @@ Entregas:
 - reserva;
 - atendimento humano.
 
+Estado atual da fase:
+
+- em andamento avancado;
+- boa parte das entregas centrais ja foi implementada;
+- o foco agora e elevar a qualidade de entendimento da IA e consolidar o fluxo real com WhatsApp.
+
 Hipoteses validadas:
 
 - o lojista consegue usar;
@@ -239,6 +284,40 @@ Entregas prioritarias:
 - funil comercial por conversa;
 - automacoes por status operacional;
 - mais controle de regras de atendimento.
+
+Observacao:
+
+- algumas entregas dessa fase ja comecaram a entrar antes do previsto, como funil comercial por conversa e automacoes basicas por status;
+- isso aconteceu porque essas camadas ficaram essenciais para o MVP funcionar de forma convincente.
+
+## Proximo Passo Imediato - Gemini
+
+Objetivo:
+
+substituir parte da rigidez do motor local por uma camada de entendimento mais forte, sem perder previsibilidade operacional.
+
+Escopo da primeira integracao:
+
+- usar Gemini para classificar intencao;
+- usar Gemini para sugerir estagio comercial;
+- usar Gemini para gerar resposta contextual;
+- mandar para o modelo apenas contexto util da conversa e catalogo relevante;
+- manter fallback local quando houver falha, timeout ou resposta insegura.
+
+Regras obrigatorias da integracao:
+
+- nao inventar estoque;
+- nao inventar preco;
+- nao prometer desconto sem regra da loja;
+- nao responder por cima do atendimento humano;
+- respeitar horario e politicas quando essas configuracoes existirem.
+
+Resultado esperado:
+
+- respostas menos roboticas;
+- melhor leitura de perguntas ambíguas;
+- melhor comportamento em saudacoes, horarios, negociacao e retomada de contexto;
+- base pronta para receber transcricao real de audio logo depois.
 
 Resultado esperado:
 

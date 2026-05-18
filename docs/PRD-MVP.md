@@ -27,6 +27,33 @@ O foco e provar que:
 - o fluxo de consulta e reserva gera valor;
 - a experiencia pode ser simples o bastante para gerar adocao.
 
+## Status Atual do MVP
+
+Data de referencia:
+
+- 17/05/2026
+
+Ja implementado:
+
+- autenticacao da loja;
+- estrutura multi-tenant;
+- onboarding inicial;
+- catalogo com cadastro, busca e edicao;
+- painel com versao mobile-first e desktop refinada;
+- painel de conversas com timeline e simulacao;
+- funil comercial inicial por conversa;
+- handoff humano com pausa da IA;
+- retorno manual para a IA;
+- persistencia real com Supabase para usuarios, produtos, conversas, mensagens e leads;
+- base estrutural para mensagens de audio e texto no mesmo fluxo.
+
+Em andamento ou proximo da execucao:
+
+- integracao com Gemini para entendimento e resposta contextual;
+- webhook operacional mais proximo do fluxo real da WhatsApp Cloud API;
+- transcricao real de audio;
+- regras configuraveis de atendimento por loja.
+
 ## Problema Principal
 
 Lojistas vendem pelo WhatsApp, mas perdem dinheiro porque:
@@ -84,6 +111,11 @@ Ao final do MVP, devemos ser capazes de colocar o produto na mao de alguns lojis
 - criacao de reserva;
 - opcao de atendimento humano.
 
+Observacao importante:
+
+- o MVP ja esta usando Supabase como banco principal;
+- o motor atual de IA ainda e local/deterministico, com Gemini previsto como proxima camada.
+
 ### Fora do MVP
 
 - integracao com ERP;
@@ -92,11 +124,17 @@ Ao final do MVP, devemos ser capazes de colocar o produto na mao de alguns lojis
 - dashboard completo;
 - campanhas;
 - pagamentos PIX;
-- audio e voz;
+- voz;
 - multiplas lojas na mesma conta;
 - multiplos vendedores com regras complexas;
 - analytics avancados;
 - Instagram Direct.
+
+Esclarecimento:
+
+- audio nao esta mais completamente fora do MVP;
+- o sistema ja foi preparado para receber texto e audio no mesmo fluxo;
+- o que ainda falta e a transcricao real e a leitura comercial mais avancada desse audio.
 
 ## Perfil de Usuario
 
@@ -218,6 +256,54 @@ Campos minimos esperados:
 Objetivo:
 
 responder com contexto sem parecer robo.
+
+Estado atual:
+
+- o fluxo ja identifica intencao, faltas de contexto, estagio comercial, urgencia e foco operacional;
+- o sistema ja respeita atendimento humano e retomada manual para IA;
+- o proximo salto de qualidade e passar a usar Gemini para classificar e responder melhor.
+
+### Fluxo 4 - Handoff humano
+
+Objetivo:
+
+garantir que a IA nao fale por cima do vendedor.
+
+Regras atuais:
+
+1. quando a conversa vai para humano, a IA para de responder;
+2. novas mensagens do cliente entram no historico sem disparar auto reply;
+3. quando a conversa volta para a IA, o sistema tenta responder a ultima mensagem pendente do cliente;
+4. se o vendedor responder pelo numero oficial conectado na Cloud API, a conversa deve ser levada para atendimento humano.
+
+### Fluxo 5 - Audio no atendimento
+
+Objetivo:
+
+tratar conversas iniciadas ou continuadas por audio sem quebrar o fluxo comercial.
+
+Estado atual:
+
+1. a estrutura de mensagens ja aceita `texto` e `audio`;
+2. o painel ja pode identificar origem da mensagem;
+3. o webhook ja pode receber placeholder para audio.
+
+Falta concluir:
+
+1. transcrever o audio;
+2. mandar o texto transcrito para o motor de IA;
+3. guardar transcricao e origem original com clareza no historico.
+
+## Proximo Passo Prioritario
+
+Integrar Gemini com fallback local.
+
+Objetivo do passo:
+
+- melhorar leitura de contexto;
+- classificar intencao com menos rigidez;
+- responder melhor em saudacoes, horarios, negociacao e pedidos tecnicos;
+- preparar a IA para trabalhar melhor depois da transcricao de audio.
 
 Passos:
 

@@ -27,6 +27,29 @@ Status sugeridos:
 - bloqueado
 - concluido
 
+## Status Atual Geral
+
+Data de referencia:
+
+- 17/05/2026
+
+Frentes ja concluidas ou bem avancadas:
+
+- autenticacao;
+- multi-tenant;
+- onboarding inicial;
+- catalogo com busca e edicao;
+- persistencia real com Supabase;
+- painel de conversas;
+- funil comercial inicial;
+- handoff humano;
+- base para audio no fluxo;
+- refinamento premium do front mobile e web.
+
+Frente prioritaria agora:
+
+- integracao com Gemini para entendimento e resposta contextual.
+
 ## Bloco 1 - Aquisicao e Validacao Comercial
 
 ### P0 - Landing page de conversao
@@ -43,9 +66,9 @@ Status sugeridos:
 - formulario conectado a banco ou ferramenta
 - armazenamento de nome, email, loja e nicho
 - mensagem de confirmacao
-- resolver bloqueio atual do Supabase antes da persistencia real
-- criar tabela de leads no Supabase
-- conectar o formulario da landing ao banco quando a infraestrutura estiver liberada
+- resolver bloqueio atual do Supabase antes da persistencia real [concluido]
+- criar tabela de leads no Supabase [concluido]
+- conectar o formulario da landing ao banco quando a infraestrutura estiver liberada [em andamento]
 
 ### P1 - Estrutura comercial inicial
 
@@ -64,134 +87,134 @@ Status sugeridos:
 
 ### P0 - Autenticacao
 
-- cadastro
-- login
-- logout
-- protecao de rotas
+- cadastro [concluido]
+- login [concluido]
+- logout [concluido]
+- protecao de rotas [concluido]
 
 ### P0 - Multi-tenant
 
-- entidade loja
-- relacao usuario x loja
-- isolamento de dados por tenant
+- entidade loja [concluido]
+- relacao usuario x loja [concluido]
+- isolamento de dados por tenant [concluido]
 
 ### P1 - Onboarding inicial
 
-- nome da loja
-- nicho
-- dados basicos
-- fluxo de primeiro acesso
+- nome da loja [concluido]
+- nicho [concluido]
+- dados basicos [concluido]
+- fluxo de primeiro acesso [concluido]
 
 ## Bloco 3 - Catalogo e Estoque
 
 ### P0 - Cadastro manual de produtos
 
-- criar produto
-- editar produto
-- listar produtos
-- excluir ou inativar produto
+- criar produto [concluido]
+- editar produto [concluido]
+- listar produtos [concluido]
+- excluir ou inativar produto [parcial]
 
 ### P0 - Estoque basico
 
-- quantidade disponivel
-- atualizacao de estoque
-- status de disponibilidade
+- quantidade disponivel [concluido]
+- atualizacao de estoque [concluido]
+- status de disponibilidade [concluido]
 
 ### P1 - Busca e filtros
 
-- busca por nome
-- busca por categoria
-- busca por compatibilidade
+- busca por nome [concluido]
+- busca por categoria [parcial]
+- busca por compatibilidade [concluido]
 
 ### P1 - Estrutura para nicho motopecas
 
-- campo de compatibilidade
-- observacoes tecnicas
-- base para ano e modelo
+- campo de compatibilidade [concluido]
+- observacoes tecnicas [concluido]
+- base para ano e modelo [parcial]
 
 ## Bloco 4 - WhatsApp e Conversas
 
 ### P0 - Conexao com WhatsApp Cloud API
 
-- configuracao de credenciais
-- webhook
-- recebimento de mensagens
-- validacao basica da integracao
+- configuracao de credenciais [parcial]
+- webhook [parcial]
+- recebimento de mensagens [parcial]
+- validacao basica da integracao [em andamento]
 
 ### P0 - Registro de conversas
 
-- criar conversa por cliente
-- armazenar mensagens
-- manter historico minimo
-- status da conversa
+- criar conversa por cliente [concluido]
+- armazenar mensagens [concluido]
+- manter historico minimo [concluido]
+- status da conversa [concluido]
 
 ### P1 - Painel de conversas
 
-- lista de conversas
-- status visivel
-- historico
-- ordenacao por prioridade
+- lista de conversas [concluido]
+- status visivel [concluido]
+- historico [concluido]
+- ordenacao por prioridade [parcial]
 
 ## Bloco 5 - Motor de IA
 
 ### P0 - Interpretacao inicial
 
-- detectar intencao
-- identificar pedido de produto
-- detectar falta de informacao
+- detectar intencao [concluido]
+- identificar pedido de produto [concluido]
+- detectar falta de informacao [concluido]
 
 ### P0 - Perguntas complementares
 
-- pedir ano, modelo, cor, voltagem ou contexto quando necessario
-- evitar respostas sem base
+- pedir ano, modelo, cor, voltagem ou contexto quando necessario [concluido]
+- evitar respostas sem base [concluido]
 
 ### P0 - Consulta de estoque
 
-- buscar produto relevante
-- validar disponibilidade
-- retornar preco e contexto
+- buscar produto relevante [concluido]
+- validar disponibilidade [concluido]
+- retornar preco e contexto [concluido]
 
 ### P0 - Resposta automatica
 
-- tom natural
-- resposta objetiva
-- tentativa de avancar a conversa
+- tom natural [parcial]
+- resposta objetiva [concluido]
+- tentativa de avancar a conversa [concluido]
 
 ### P1 - Regras de seguranca
 
-- evitar alucinacao
-- fallback para humano
-- limitar resposta em casos ambiguos
+- evitar alucinacao [parcial]
+- fallback para humano [concluido]
+- limitar resposta em casos ambiguos [parcial]
 
 ### P1 - Funil comercial e automacoes
 
-- definir estagios comerciais da conversa
-- refletir estagio no painel
-- definir urgencia e foco operacional
-- criar transicoes basicas por status
-- preparar follow-up de conversas paradas
+- definir estagios comerciais da conversa [concluido]
+- refletir estagio no painel [concluido]
+- definir urgencia e foco operacional [concluido]
+- criar transicoes basicas por status [concluido]
+- preparar follow-up de conversas paradas [parcial]
 
 ### P1 - Preparacao para audio
 
-- aceitar conversa iniciada por audio
-- aceitar conversa mista com texto e audio
-- registrar origem da mensagem
-- preparar fluxo de transcricao para usar a mesma logica da IA
+- aceitar conversa iniciada por audio [concluido na estrutura]
+- aceitar conversa mista com texto e audio [concluido na estrutura]
+- registrar origem da mensagem [concluido]
+- preparar fluxo de transcricao para usar a mesma logica da IA [em andamento]
 
 ## Bloco 6 - Reserva e Fluxo Comercial
 
 ### P0 - Criacao de reserva
 
-- vincular produto
-- vincular conversa
-- quantidade
-- status da reserva
+- vincular produto [concluido]
+- vincular conversa [concluido]
+- quantidade [concluido]
+- status da reserva [concluido]
 
 ### P0 - Atualizacao do painel
 
-- exibir reserva no painel
-- exibir conversa reservada
-- registrar data e status
+- exibir reserva no painel [concluido]
+- exibir conversa reservada [concluido]
+- registrar data e status [concluido]
 
 ### P1 - Notificacao ao lojista
 
@@ -202,21 +225,50 @@ Status sugeridos:
 
 ### P0 - Assumir atendimento humano
 
-- botao para assumir conversa
-- interrupcao da IA naquela conversa
-- historico preservado
+- botao para assumir conversa [concluido]
+- interrupcao da IA naquela conversa [concluido]
+- historico preservado [concluido]
 
 ### P1 - Painel inicial
 
-- resumo de conversas
-- resumo de reservas
-- atalhos rapidos
+- resumo de conversas [concluido]
+- resumo de reservas [concluido]
+- atalhos rapidos [concluido]
 
 ### P1 - Melhorias mobile
 
-- fluxo rapido no celular
-- leitura simples
-- acoes principais acessiveis
+- fluxo rapido no celular [concluido]
+- leitura simples [concluido]
+- acoes principais acessiveis [concluido]
+
+## Bloco Prioritario Atual - Gemini
+
+### P0 - Integracao inicial do Gemini
+
+- criar provider do Gemini no backend
+- configurar chave de ambiente
+- enviar ultimas mensagens, contexto da loja e catalogo relevante
+- receber resposta estruturada com intencao, estagio, precisa de humano e resposta sugerida
+- manter fallback local se o Gemini falhar
+
+### P0 - Uso do Gemini no motor de IA
+
+- usar Gemini para classificar intencao
+- usar Gemini para gerar resposta contextual
+- impedir que o modelo invente preco, estoque ou politicas
+- respeitar handoff humano e status operacional
+
+### P1 - Gemini + audio
+
+- reutilizar a mesma pipeline depois da transcricao
+- tratar texto puro e texto transcrito com a mesma camada de entendimento
+- guardar metadados da origem da mensagem
+
+### P1 - Observabilidade da IA
+
+- registrar quando a resposta veio do fallback local
+- registrar quando veio do Gemini
+- preparar base para medir qualidade das respostas
 
 ## Bloco 8 - Validacao com Pilotos
 
