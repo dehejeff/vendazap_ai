@@ -190,6 +190,14 @@ function inferLifecycleDealStage(conversation: StoredConversation) {
     return "parado" as const;
   }
 
+  if (
+    conversation.dealStage &&
+    conversation.dealStage !== "fechado" &&
+    conversation.dealStage !== "parado"
+  ) {
+    return conversation.dealStage;
+  }
+
   return inferDealStageFromStatus(conversation.status);
 }
 
@@ -711,6 +719,48 @@ export async function appendConversationMessage(
   }
 
   return normalizedConversation;
+}
+
+export async function syncConversationAssistantState(params: {
+  conversationId: string;
+  dealStage: StoredConversation["dealStage"];
+  status: ConversationStatus;
+  userId: string;
+}) {
+  const currentConversation = await getConversationById(
+    params.conversationId,
+    params.userId,
+  );
+
+  if (!currentConversation) {
+    throw new Error("Conversa não encontrada.");
+  }
+
+  const updatedConversation: StoredConversation = refreshConversationLifecycle({
+    ...currentConversation,
+    dealStage: params.dealStage,
+    priorityLabel: inferPriorityFromStatus(params.status),
+    status: params.status,
+  });
+
+  if (isSupabaseServerConfigured()) {
+    await updateSupabaseConversation(updatedConversation);
+  } else {
+    const conversations = await readConversations();
+    const conversationIndex = conversations.findIndex(
+      (item) =>
+        item.id === params.conversationId && item.userId === params.userId,
+    );
+
+    if (conversationIndex === -1) {
+      throw new Error("Conversa não encontrada.");
+    }
+
+    conversations[conversationIndex] = updatedConversation;
+    await writeConversations(conversations);
+  }
+
+  return updatedConversation;
 }
 
 export async function reserveConversationProduct(

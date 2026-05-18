@@ -1,5 +1,9 @@
 import { ReserveProductForm } from "@/components/reserve-product-form";
 import type { AssistantSuggestion } from "@/lib/ai-assistant";
+import {
+  conversationDealStageLabelMap,
+  conversationStatusLabelMap,
+} from "@/lib/dashboard-constants";
 
 type AssistantSuggestionCardProps = {
   conversationId: string;
@@ -71,6 +75,18 @@ export function AssistantSuggestionCard({
         <span className="rounded-full bg-[#f4f8ff] px-3 py-1 text-xs font-semibold text-[#1e355d]">
           Urgência: {suggestion.urgencyLabel}
         </span>
+        {suggestion.suggestedConversationStatus ? (
+          <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#2d5b91]">
+            Status sugerido:{" "}
+            {conversationStatusLabelMap[suggestion.suggestedConversationStatus]}
+          </span>
+        ) : null}
+        {suggestion.suggestedConversationDealStage ? (
+          <span className="rounded-full bg-[#edf8f2] px-3 py-1 text-xs font-semibold text-[#2d8a4b]">
+            Funil sugerido:{" "}
+            {conversationDealStageLabelMap[suggestion.suggestedConversationDealStage]}
+          </span>
+        ) : null}
       </div>
 
       <div className="dashboard-tint-emerald mt-4 rounded-[1.3rem] border border-[#deeadf] p-4">

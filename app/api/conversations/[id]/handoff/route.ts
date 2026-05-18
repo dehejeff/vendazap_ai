@@ -1,10 +1,14 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, decodeSession } from "@/lib/auth";
-import { buildAssistantSuggestion } from "@/lib/ai-assistant";
+import {
+  buildAssistantSuggestion,
+  resolveAssistantConversationState,
+} from "@/lib/ai-assistant";
 import {
   appendConversationMessage,
   getConversationById,
+  syncConversationAssistantState,
   updateConversationHandoff,
 } from "@/lib/conversations";
 import { listProductsByUserId } from "@/lib/products";
@@ -55,9 +59,19 @@ export async function POST(
         const products = await listProductsByUserId(session.userId);
         const suggestion = buildAssistantSuggestion(refreshedConversation, products);
 
-        conversation = await appendConversationMessage(id, {
+        await appendConversationMessage(id, {
           author: "ia",
           content: suggestion.suggestedReply,
+          userId: session.userId,
+        });
+        const suggestedState = resolveAssistantConversationState(
+          refreshedConversation,
+          suggestion,
+        );
+        conversation = await syncConversationAssistantState({
+          conversationId: id,
+          dealStage: suggestedState.dealStage,
+          status: suggestedState.status,
           userId: session.userId,
         });
       }
