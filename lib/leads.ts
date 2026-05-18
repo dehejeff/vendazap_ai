@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDataFilePath } from "@/lib/storage-path";
+import { isSupabaseServerConfigured } from "@/lib/supabase/config";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type LeadInput = {
   email: string;
@@ -13,6 +15,17 @@ export type LeadInput = {
 type StoredLead = LeadInput & {
   createdAt: string;
   source: "landing-page";
+};
+
+type SupabaseLeadRow = {
+  created_at: string;
+  email: string | null;
+  id: string;
+  name: string;
+  niche: string | null;
+  phone: string | null;
+  source: string | null;
+  store_name: string;
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -70,17 +83,52 @@ async function readExistingLeads(filePath: string) {
 
 export async function saveLead(input: LeadInput) {
   const normalized = validateLeadInput(input);
-  const filePath = resolveLeadsFilePath();
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-
-  const leads = await readExistingLeads(filePath);
   const newLead: StoredLead = {
     ...normalized,
     createdAt: new Date().toISOString(),
     source: "landing-page",
   };
 
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("leads")
+      .insert({
+        created_at: newLead.createdAt,
+        email: newLead.email,
+        name: newLead.name,
+        niche: newLead.niche,
+        phone: newLead.phone || null,
+        source: newLead.source,
+        store_name: newLead.storeName,
+      })
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase leads: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Nao foi possivel salvar o lead.");
+    }
+
+    const row = data as SupabaseLeadRow;
+
+    return {
+      createdAt: row.created_at,
+      email: row.email ?? "",
+      name: row.name,
+      niche: row.niche ?? "",
+      phone: row.phone ?? "",
+      source: "landing-page",
+      storeName: row.store_name,
+    } satisfies StoredLead;
+  }
+
+  const filePath = resolveLeadsFilePath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const leads = await readExistingLeads(filePath);
   leads.push(newLead);
   await writeFile(filePath, JSON.stringify(leads, null, 2), "utf8");
 

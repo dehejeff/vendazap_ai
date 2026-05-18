@@ -1,7 +1,30 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, decodeSession } from "@/lib/auth";
-import { updateConversationHandoff } from "@/lib/conversations";
+import { buildAssistantSuggestion } from "@/lib/ai-assistant";
+import {
+  appendConversationMessage,
+  getConversationById,
+  updateConversationHandoff,
+} from "@/lib/conversations";
+import { listProductsByUserId } from "@/lib/products";
+
+function hasPendingClientMessage(
+  conversation: NonNullable<Awaited<ReturnType<typeof getConversationById>>>,
+) {
+  const lastClientIndex = [...conversation.messages]
+    .map((message, index) => ({ index, message }))
+    .reverse()
+    .find((entry) => entry.message.author === "cliente")?.index;
+
+  if (lastClientIndex === undefined) {
+    return false;
+  }
+
+  return conversation.messages
+    .slice(lastClientIndex + 1)
+    .every((message) => message.author === "sistema");
+}
 
 export async function POST(
   request: Request,
@@ -17,12 +40,28 @@ export async function POST(
   try {
     const { id } = await context.params;
     const body = (await request.json()) as { humanActive?: boolean };
+    const shouldActivateHuman = Boolean(body.humanActive);
 
-    const conversation = await updateConversationHandoff(
+    let conversation = await updateConversationHandoff(
       id,
       session.userId,
-      Boolean(body.humanActive),
+      shouldActivateHuman,
     );
+
+    if (!shouldActivateHuman) {
+      const refreshedConversation = await getConversationById(id, session.userId);
+
+      if (refreshedConversation && hasPendingClientMessage(refreshedConversation)) {
+        const products = await listProductsByUserId(session.userId);
+        const suggestion = buildAssistantSuggestion(refreshedConversation, products);
+
+        conversation = await appendConversationMessage(id, {
+          author: "ia",
+          content: suggestion.suggestedReply,
+          userId: session.userId,
+        });
+      }
+    }
 
     return NextResponse.json(
       { message: "Conversa atualizada com sucesso.", conversation },

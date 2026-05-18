@@ -93,6 +93,31 @@ function inferIntent(message: string): AssistantIntent {
   return "duvida_geral";
 }
 
+function inferGreetingOnly(message: string) {
+  const normalized = normalizeText(message)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  const greetingTerms = [
+    "oi",
+    "ola",
+    "opa",
+    "bom dia",
+    "boa tarde",
+    "boa noite",
+    "tudo bem",
+  ];
+
+  return greetingTerms.some(
+    (term) => normalized === term || normalized.startsWith(`${term} `),
+  );
+}
+
 function inferNeedsVehicleYear(message: string) {
   const normalized = normalizeText(message);
 
@@ -273,7 +298,7 @@ export function buildAssistantSuggestion(
   const messageContent = latestClientMessage?.content ?? "";
   const conversationContext = getClientConversationContext(conversation);
   const normalizedMessage = normalizeText(conversationContext || messageContent);
-  const intent = inferIntent(conversationContext || messageContent);
+  const intent = inferIntent(messageContent || conversationContext);
   const year = extractYear(conversationContext || messageContent);
   const activeProducts = products.filter((product) => product.active);
   const matchedProducts = activeProducts
@@ -288,6 +313,28 @@ export function buildAssistantSuggestion(
 
   const missingData: string[] = [];
 
+  if (inferGreetingOnly(messageContent)) {
+    const stockStatus = "sem_correspondencia" as const;
+    return {
+      conversationId: conversation.id,
+      confidenceLabel: "Alta",
+      dealStage: "descoberta",
+      intent: "duvida_geral",
+      matchedProducts: [],
+      missingData,
+      nextStepLabel: "Abrir a conversa",
+      operationalFocusLabel: "Entender a necessidade",
+      shouldEscalateToHuman: false,
+      shouldOfferReservation: false,
+      stockStatus,
+      suggestedReply:
+        "Olá! Tudo bem? 😊 Me diga qual peça, produto ou dúvida você quer verificar que eu continuo com você por aqui.",
+      summary:
+        "O cliente retomou a conversa com uma saudação curta e ainda não trouxe uma nova necessidade objetiva.",
+      urgencyLabel: inferUrgencyLabel(conversation, "duvida_geral", stockStatus),
+    };
+  }
+
   if (
     intent === "busca_produto" &&
     !year &&
@@ -301,7 +348,7 @@ export function buildAssistantSuggestion(
   }
 
   if (intent === "busca_produto" && matchedProducts.length === 0) {
-    const shouldEscalateToHuman = inferNeedsHumanSupport(conversationContext);
+    const shouldEscalateToHuman = inferNeedsHumanSupport(messageContent);
     const dealStage = inferDealStage(conversation, intent, missingData);
     const stockStatus = "sem_correspondencia" as const;
     return {
@@ -483,7 +530,7 @@ export function buildAssistantSuggestion(
       : topProduct.stockQuantity <= 2
         ? "baixo_estoque"
         : "em_estoque";
-  const shouldEscalateToHuman = inferNeedsHumanSupport(conversationContext);
+  const shouldEscalateToHuman = inferNeedsHumanSupport(messageContent);
   const shouldOfferReservation = topProduct.stockQuantity > 0;
   const dealStage = inferDealStage(conversation, intent, missingData);
 

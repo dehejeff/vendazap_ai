@@ -1,7 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDataFilePath } from "@/lib/storage-path";
+import { isSupabaseServerConfigured } from "@/lib/supabase/config";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ConversationStatus =
   | "nova"
@@ -58,7 +60,35 @@ export type ConversationReservationInput = {
   userId: string;
 };
 
+type SupabaseConversationRow = {
+  client_name: string;
+  client_phone: string;
+  deal_stage: string | null;
+  id: string;
+  priority_label: "Quente" | "Médio" | "Humano";
+  reserved_pickup_name: string | null;
+  reserved_pickup_window: string | null;
+  reserved_product: string | null;
+  status: ConversationStatus;
+  updated_at: string;
+  user_id: string;
+};
+
+type SupabaseConversationMessageRow = {
+  author: MessageAuthor;
+  content: string;
+  conversation_id: string;
+  id: string;
+  input_type: MessageInputType | null;
+  timestamp: string;
+};
+
 const PARADO_AFTER_HOURS = 12;
+
+function createDeterministicId(...parts: string[]) {
+  const hash = createHash("sha1").update(parts.join("::")).digest("hex").slice(0, 32);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
 
 function normalizeText(value: string) {
   return value
@@ -191,6 +221,207 @@ function resolveConversationsFilePath() {
   );
 }
 
+function mapSupabaseMessage(row: SupabaseConversationMessageRow): StoredMessage {
+  return {
+    author: row.author,
+    content: row.content,
+    id: row.id,
+    inputType: row.input_type ?? undefined,
+    timestamp: row.timestamp,
+  };
+}
+
+function mapSupabaseConversation(
+  row: SupabaseConversationRow,
+  messages: StoredMessage[],
+): StoredConversation {
+  return {
+    clientName: row.client_name,
+    clientPhone: row.client_phone,
+    dealStage: (row.deal_stage as StoredConversation["dealStage"]) ?? undefined,
+    id: row.id,
+    messages,
+    priorityLabel: row.priority_label,
+    reservedPickupName: row.reserved_pickup_name ?? undefined,
+    reservedPickupWindow: row.reserved_pickup_window ?? undefined,
+    reservedProduct: row.reserved_product ?? undefined,
+    status: row.status,
+    updatedAt: row.updated_at,
+    userId: row.user_id,
+  };
+}
+
+async function listSupabaseConversationMessages(conversationIds: string[]) {
+  if (conversationIds.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversation_messages")
+    .select("*")
+    .in("conversation_id", conversationIds)
+    .order("timestamp", { ascending: true });
+
+  if (error) {
+    throw new Error(`Supabase conversations: ${error.message}`);
+  }
+
+  return (data ?? []) as SupabaseConversationMessageRow[];
+}
+
+async function listSupabaseConversationsByUserId(userId: string) {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Supabase conversations: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as SupabaseConversationRow[];
+  const messages = await listSupabaseConversationMessages(rows.map((row) => row.id));
+  const messagesByConversation = new Map<string, StoredMessage[]>();
+
+  for (const message of messages) {
+    const current = messagesByConversation.get(message.conversation_id) ?? [];
+    current.push(mapSupabaseMessage(message));
+    messagesByConversation.set(message.conversation_id, current);
+  }
+
+  return rows.map((row) =>
+    mapSupabaseConversation(row, messagesByConversation.get(row.id) ?? []),
+  );
+}
+
+async function dedupeSupabaseConversationsForUser(userId: string) {
+  const conversations = await listSupabaseConversationsByUserId(userId);
+  const supabase = getSupabaseServerClient();
+  const seenPhones = new Set<string>();
+  const duplicateIds: string[] = [];
+
+  for (const conversation of conversations) {
+    const phoneKey = conversation.clientPhone.trim();
+
+    if (!phoneKey) {
+      continue;
+    }
+
+    if (seenPhones.has(phoneKey)) {
+      duplicateIds.push(conversation.id);
+      continue;
+    }
+
+    seenPhones.add(phoneKey);
+  }
+
+  if (duplicateIds.length > 0) {
+    const { error } = await supabase
+      .from("conversations")
+      .delete()
+      .in("id", duplicateIds)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new Error(`Supabase conversations: ${error.message}`);
+    }
+  }
+
+  return duplicateIds.length > 0
+    ? listSupabaseConversationsByUserId(userId)
+    : conversations;
+}
+
+async function insertSupabaseConversation(conversation: StoredConversation) {
+  const supabase = getSupabaseServerClient();
+  const { error: conversationError } = await supabase.from("conversations").upsert(
+    {
+      client_name: conversation.clientName,
+      client_phone: conversation.clientPhone,
+      deal_stage: conversation.dealStage ?? null,
+      id: conversation.id,
+      priority_label: conversation.priorityLabel,
+      reserved_pickup_name: conversation.reservedPickupName ?? null,
+      reserved_pickup_window: conversation.reservedPickupWindow ?? null,
+      reserved_product: conversation.reservedProduct ?? null,
+      status: conversation.status,
+      updated_at: conversation.updatedAt,
+      user_id: conversation.userId,
+    },
+    { onConflict: "id" },
+  );
+
+  if (conversationError) {
+    throw new Error(`Supabase conversations: ${conversationError.message}`);
+  }
+
+  if (conversation.messages.length > 0) {
+    const { error: messagesError } = await supabase
+      .from("conversation_messages")
+      .upsert(
+        conversation.messages.map((message) => ({
+          author: message.author,
+          content: message.content,
+          conversation_id: conversation.id,
+          id: message.id,
+          input_type: message.inputType ?? null,
+          timestamp: message.timestamp,
+        })),
+        { onConflict: "id" },
+      );
+
+    if (messagesError) {
+      throw new Error(`Supabase conversations: ${messagesError.message}`);
+    }
+  }
+}
+
+async function updateSupabaseConversation(conversation: StoredConversation) {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from("conversations")
+    .update({
+      client_name: conversation.clientName,
+      client_phone: conversation.clientPhone,
+      deal_stage: conversation.dealStage ?? null,
+      priority_label: conversation.priorityLabel,
+      reserved_pickup_name: conversation.reservedPickupName ?? null,
+      reserved_pickup_window: conversation.reservedPickupWindow ?? null,
+      reserved_product: conversation.reservedProduct ?? null,
+      status: conversation.status,
+      updated_at: conversation.updatedAt,
+      user_id: conversation.userId,
+    })
+    .eq("id", conversation.id)
+    .eq("user_id", conversation.userId);
+
+  if (error) {
+    throw new Error(`Supabase conversations: ${error.message}`);
+  }
+}
+
+async function insertSupabaseConversationMessage(
+  conversationId: string,
+  message: StoredMessage,
+) {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("conversation_messages").insert({
+    author: message.author,
+    content: message.content,
+    conversation_id: conversationId,
+    id: message.id,
+    input_type: message.inputType ?? null,
+    timestamp: message.timestamp,
+  });
+
+  if (error) {
+    throw new Error(`Supabase conversations: ${error.message}`);
+  }
+}
+
 async function readConversations(): Promise<StoredConversation[]> {
   const filePath = resolveConversationsFilePath();
 
@@ -225,7 +456,7 @@ function buildSeedConversations(userId: string): StoredConversation[] {
 
   return [
     {
-      id: randomUUID(),
+      id: createDeterministicId(userId, "seed", "11987654321"),
       userId,
       clientName: "Carlos XRE 300",
       clientPhone: "11987654321",
@@ -236,28 +467,28 @@ function buildSeedConversations(userId: string): StoredConversation[] {
       updatedAt: minutesAgo(6),
       messages: [
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11987654321", "1"),
           author: "cliente",
           content: "Boa tarde, vocês têm correia da XRE 300?",
           inputType: "texto",
           timestamp: minutesAgo(12),
         },
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11987654321", "2"),
           author: "ia",
           content: "Boa tarde 😊 Você sabe me informar o ano da moto?",
           inputType: "texto",
           timestamp: minutesAgo(11),
         },
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11987654321", "3"),
           author: "cliente",
           content: "2020",
           inputType: "texto",
           timestamp: minutesAgo(10),
         },
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11987654321", "4"),
           author: "ia",
           content:
             "Temos sim 😊 Correia Gates compatível com XRE 300 2020 por R$189,90. Posso deixar separada?",
@@ -267,7 +498,7 @@ function buildSeedConversations(userId: string): StoredConversation[] {
       ],
     },
     {
-      id: randomUUID(),
+      id: createDeterministicId(userId, "seed", "11999887766"),
       userId,
       clientName: "Juliana Titan",
       clientPhone: "11999887766",
@@ -277,14 +508,14 @@ function buildSeedConversations(userId: string): StoredConversation[] {
       updatedAt: minutesAgo(18),
       messages: [
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11999887766", "1"),
           author: "cliente",
           content: "Tem kit relação pra Titan?",
           inputType: "texto",
           timestamp: minutesAgo(20),
         },
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11999887766", "2"),
           author: "ia",
           content: "Temos algumas opções 😊 Você consegue me dizer o ano da moto?",
           inputType: "texto",
@@ -293,7 +524,7 @@ function buildSeedConversations(userId: string): StoredConversation[] {
       ],
     },
     {
-      id: randomUUID(),
+      id: createDeterministicId(userId, "seed", "11995554433"),
       userId,
       clientName: "Rafael Capacete",
       clientPhone: "11995554433",
@@ -303,14 +534,14 @@ function buildSeedConversations(userId: string): StoredConversation[] {
       updatedAt: minutesAgo(35),
       messages: [
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11995554433", "1"),
           author: "cliente",
           content: "Consegue melhorar no preço desse capacete?",
           inputType: "texto",
           timestamp: minutesAgo(40),
         },
         {
-          id: randomUUID(),
+          id: createDeterministicId(userId, "seed-message", "11995554433", "2"),
           author: "sistema",
           content: "Conversa direcionada para atendimento humano.",
           inputType: "texto",
@@ -322,6 +553,22 @@ function buildSeedConversations(userId: string): StoredConversation[] {
 }
 
 async function ensureSeedConversations(userId: string) {
+  if (isSupabaseServerConfigured()) {
+    const existing = await dedupeSupabaseConversationsForUser(userId);
+
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    const seededConversations = buildSeedConversations(userId);
+
+    for (const conversation of seededConversations) {
+      await insertSupabaseConversation(conversation);
+    }
+
+    return dedupeSupabaseConversationsForUser(userId);
+  }
+
   const conversations = await readConversations();
   const hasUserConversation = conversations.some((item) => item.userId === userId);
 
@@ -353,7 +600,15 @@ async function refreshLifecycleStateForUser(userId: string) {
   });
 
   if (hasChanges) {
-    await writeConversations(refreshed);
+    if (isSupabaseServerConfigured()) {
+      for (const conversation of refreshed) {
+        if (conversation.userId === userId) {
+          await updateSupabaseConversation(conversation);
+        }
+      }
+    } else {
+      await writeConversations(refreshed);
+    }
   }
 
   return refreshed;
@@ -398,16 +653,11 @@ export async function appendConversationMessage(
     throw new Error("Informe a mensagem da conversa.");
   }
 
-  const conversations = await readConversations();
-  const conversationIndex = conversations.findIndex(
-    (item) => item.id === conversationId && item.userId === input.userId,
-  );
+  const currentConversation = await getConversationById(conversationId, input.userId);
 
-  if (conversationIndex === -1) {
+  if (!currentConversation) {
     throw new Error("Conversa não encontrada.");
   }
-
-  const currentConversation = conversations[conversationIndex];
   const nextStatus: ConversationStatus =
     currentConversation.status === "reservada"
       ? "reservada"
@@ -422,27 +672,43 @@ export async function appendConversationMessage(
             ? "em_atendimento_humano"
             : currentConversation.status;
 
+  const newMessage: StoredMessage = {
+    id: randomUUID(),
+    author: input.author,
+    content: normalizedContent,
+    inputType: input.inputType ?? "texto",
+    timestamp: new Date().toISOString(),
+  };
+
   const updatedConversation: StoredConversation = {
     ...currentConversation,
     status: nextStatus,
     priorityLabel: inferPriorityFromStatus(nextStatus),
-    updatedAt: new Date().toISOString(),
+    updatedAt: newMessage.timestamp,
     messages: [
       ...currentConversation.messages,
-      {
-        id: randomUUID(),
-        author: input.author,
-        content: normalizedContent,
-        inputType: input.inputType ?? "texto",
-        timestamp: new Date().toISOString(),
-      },
+      newMessage,
     ],
   };
 
   const normalizedConversation = refreshConversationLifecycle(updatedConversation);
 
-  conversations[conversationIndex] = normalizedConversation;
-  await writeConversations(conversations);
+  if (isSupabaseServerConfigured()) {
+    await updateSupabaseConversation(normalizedConversation);
+    await insertSupabaseConversationMessage(conversationId, newMessage);
+  } else {
+    const conversations = await readConversations();
+    const conversationIndex = conversations.findIndex(
+      (item) => item.id === conversationId && item.userId === input.userId,
+    );
+
+    if (conversationIndex === -1) {
+      throw new Error("Conversa não encontrada.");
+    }
+
+    conversations[conversationIndex] = normalizedConversation;
+    await writeConversations(conversations);
+  }
 
   return normalizedConversation;
 }
@@ -467,17 +733,27 @@ export async function reserveConversationProduct(
     throw new Error("Informe o horário ou período de retirada.");
   }
 
-  const conversations = await readConversations();
-  const conversationIndex = conversations.findIndex(
-    (item) => item.id === conversationId && item.userId === input.userId,
-  );
+  const currentConversation = await getConversationById(conversationId, input.userId);
 
-  if (conversationIndex === -1) {
+  if (!currentConversation) {
     throw new Error("Conversa não encontrada.");
   }
-
-  const currentConversation = conversations[conversationIndex];
   const timestamp = new Date().toISOString();
+  const systemMessage: StoredMessage = {
+    id: randomUUID(),
+    author: "sistema",
+    content: `Reserva criada para ${normalizedProductName} em nome de ${normalizedPickupName}.`,
+    inputType: "texto",
+    timestamp,
+  };
+  const aiMessage: StoredMessage = {
+    id: randomUUID(),
+    author: "ia",
+    content:
+      `Perfeito 😊 Já deixei separado por aqui no nome de ${normalizedPickupName} para ${normalizedPickupWindow}.`,
+    inputType: "texto",
+    timestamp,
+  };
 
   const updatedConversation: StoredConversation = {
     ...currentConversation,
@@ -490,28 +766,30 @@ export async function reserveConversationProduct(
     updatedAt: timestamp,
     messages: [
       ...currentConversation.messages,
-      {
-        id: randomUUID(),
-        author: "sistema",
-        content: `Reserva criada para ${normalizedProductName} em nome de ${normalizedPickupName}.`,
-        inputType: "texto",
-        timestamp,
-      },
-      {
-        id: randomUUID(),
-        author: "ia",
-        content:
-          `Perfeito 😊 Já deixei separado por aqui no nome de ${normalizedPickupName} para ${normalizedPickupWindow}.`,
-        inputType: "texto",
-        timestamp,
-      },
+      systemMessage,
+      aiMessage,
     ],
   };
 
   const normalizedConversation = refreshConversationLifecycle(updatedConversation);
 
-  conversations[conversationIndex] = normalizedConversation;
-  await writeConversations(conversations);
+  if (isSupabaseServerConfigured()) {
+    await updateSupabaseConversation(normalizedConversation);
+    await insertSupabaseConversationMessage(conversationId, systemMessage);
+    await insertSupabaseConversationMessage(conversationId, aiMessage);
+  } else {
+    const conversations = await readConversations();
+    const conversationIndex = conversations.findIndex(
+      (item) => item.id === conversationId && item.userId === input.userId,
+    );
+
+    if (conversationIndex === -1) {
+      throw new Error("Conversa não encontrada.");
+    }
+
+    conversations[conversationIndex] = normalizedConversation;
+    await writeConversations(conversations);
+  }
 
   return normalizedConversation;
 }
@@ -543,7 +821,6 @@ export async function createIncomingConversation(params: {
     throw new Error("Dados inválidos para criar a conversa.");
   }
 
-  const conversations = await ensureSeedConversations(params.userId);
   const timestamp = new Date().toISOString();
 
   const newConversation: StoredConversation = {
@@ -567,8 +844,15 @@ export async function createIncomingConversation(params: {
   };
 
   const normalizedConversation = refreshConversationLifecycle(newConversation);
-  const updatedConversations = [...conversations, normalizedConversation];
-  await writeConversations(updatedConversations);
+
+  if (isSupabaseServerConfigured()) {
+    await ensureSeedConversations(params.userId);
+    await insertSupabaseConversation(normalizedConversation);
+  } else {
+    const conversations = await ensureSeedConversations(params.userId);
+    const updatedConversations = [...conversations, normalizedConversation];
+    await writeConversations(updatedConversations);
+  }
 
   return normalizedConversation;
 }
@@ -578,21 +862,25 @@ export async function updateConversationHandoff(
   userId: string,
   humanActive: boolean,
 ) {
-  const conversations = await readConversations();
-  const conversationIndex = conversations.findIndex(
-    (item) => item.id === conversationId && item.userId === userId,
-  );
+  const currentConversation = await getConversationById(conversationId, userId);
 
-  if (conversationIndex === -1) {
+  if (!currentConversation) {
     throw new Error("Conversa não encontrada.");
   }
-
-  const currentConversation = conversations[conversationIndex];
   const newStatus: ConversationStatus = humanActive
     ? "em_atendimento_humano"
     : currentConversation.reservedProduct
       ? "reservada"
       : "respondida_pela_ia";
+  const handoffMessage: StoredMessage = {
+    id: randomUUID(),
+    author: "sistema",
+    content: humanActive
+      ? "Atendimento assumido manualmente pela loja."
+      : "Atendimento devolvido para o fluxo assistido.",
+    inputType: "texto",
+    timestamp: new Date().toISOString(),
+  };
 
   const updatedConversation: StoredConversation = {
     ...currentConversation,
@@ -600,25 +888,31 @@ export async function updateConversationHandoff(
       ? "Humano"
       : inferPriorityFromStatus(newStatus),
     status: newStatus,
-    updatedAt: new Date().toISOString(),
+    updatedAt: handoffMessage.timestamp,
     messages: [
       ...currentConversation.messages,
-      {
-        id: randomUUID(),
-        author: "sistema",
-        content: humanActive
-          ? "Atendimento assumido manualmente pela loja."
-          : "Atendimento devolvido para o fluxo assistido.",
-        inputType: "texto",
-        timestamp: new Date().toISOString(),
-      },
+      handoffMessage,
     ],
   };
 
   const normalizedConversation = refreshConversationLifecycle(updatedConversation);
 
-  conversations[conversationIndex] = normalizedConversation;
-  await writeConversations(conversations);
+  if (isSupabaseServerConfigured()) {
+    await updateSupabaseConversation(normalizedConversation);
+    await insertSupabaseConversationMessage(conversationId, handoffMessage);
+  } else {
+    const conversations = await readConversations();
+    const conversationIndex = conversations.findIndex(
+      (item) => item.id === conversationId && item.userId === userId,
+    );
+
+    if (conversationIndex === -1) {
+      throw new Error("Conversa não encontrada.");
+    }
+
+    conversations[conversationIndex] = normalizedConversation;
+    await writeConversations(conversations);
+  }
 
   return normalizedConversation;
 }
@@ -635,16 +929,11 @@ export async function markConversationAsHumanByClientPhone(
     throw new Error("Telefone do cliente inválido.");
   }
 
-  const conversations = await readConversations();
-  const conversationIndex = conversations.findIndex(
-    (item) => item.clientPhone.trim() === normalizedPhone && item.userId === userId,
-  );
+  const currentConversation = await findConversationByClientPhone(normalizedPhone, userId);
 
-  if (conversationIndex === -1) {
+  if (!currentConversation) {
     return null;
   }
-
-  const currentConversation = conversations[conversationIndex];
   const timestamp = new Date().toISOString();
   const alreadyInHumanHandoff =
     currentConversation.status === "em_atendimento_humano";
@@ -684,8 +973,29 @@ export async function markConversationAsHumanByClientPhone(
 
   const normalizedConversation = refreshConversationLifecycle(updatedConversation);
 
-  conversations[conversationIndex] = normalizedConversation;
-  await writeConversations(conversations);
+  if (isSupabaseServerConfigured()) {
+    await updateSupabaseConversation(normalizedConversation);
+
+    const appendedMessages = normalizedConversation.messages.slice(
+      currentConversation.messages.length,
+    );
+
+    for (const message of appendedMessages) {
+      await insertSupabaseConversationMessage(normalizedConversation.id, message);
+    }
+  } else {
+    const conversations = await readConversations();
+    const conversationIndex = conversations.findIndex(
+      (item) => item.clientPhone.trim() === normalizedPhone && item.userId === userId,
+    );
+
+    if (conversationIndex === -1) {
+      return null;
+    }
+
+    conversations[conversationIndex] = normalizedConversation;
+    await writeConversations(conversations);
+  }
 
   return normalizedConversation;
 }

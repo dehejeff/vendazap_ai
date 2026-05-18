@@ -58,8 +58,9 @@ function SidebarIcon({ name }: { name: string }) {
   );
 }
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ storeName }: { storeName?: string }) {
   const pathname = usePathname();
+  const sidebarStoreName = storeName?.trim() || "Loja ativa";
 
   return (
     <aside className="fixed left-0 top-0 hidden h-screen w-64 flex-col border-r border-[#bbcbb9]/60 bg-[#f0f3ff] shadow-sm md:flex">
@@ -67,7 +68,7 @@ export function DashboardSidebar() {
         <div className="px-4 py-5">
           <BrandLogo size="sm" theme="light" />
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-[#6c7b6b]">
-            Loja Ativa
+            {sidebarStoreName}
           </p>
         </div>
 

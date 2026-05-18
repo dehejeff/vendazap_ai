@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { CatalogWorkspace } from "@/components/catalog-workspace";
 import { ProductForm } from "@/components/product-form";
+import { ProductStockForm } from "@/components/product-stock-form";
 import { StoreOnboardingForm } from "@/components/store-onboarding-form";
 import type { StoredProduct } from "@/lib/products";
 
@@ -27,6 +28,9 @@ export function CatalogPageSection({
   sessionStoreName,
 }: CatalogPageSectionProps) {
   const [desktopSearch, setDesktopSearch] = useState("");
+  const [expandedDesktopProductIds, setExpandedDesktopProductIds] = useState<
+    string[]
+  >([]);
 
   function normalizeText(value: string) {
     return value
@@ -60,6 +64,14 @@ export function CatalogPageSection({
   const categories = Array.from(
     new Set(products.map((product) => product.category).filter(Boolean)),
   ).slice(0, 6);
+
+  function toggleDesktopProduct(productId: string) {
+    setExpandedDesktopProductIds((current) =>
+      current.includes(productId)
+        ? current.filter((id) => id !== productId)
+        : [...current, productId],
+    );
+  }
 
   return (
     <div className="space-y-6 md:space-y-5">
@@ -266,46 +278,94 @@ export function CatalogPageSection({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#bbcbb9]/15">
-                {filteredDesktopProducts.map((product) => (
-                  <tr key={product.id} className="group hover:bg-[#f9f9ff]">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e7eeff] font-bold text-[#006d2f]">
-                          {product.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-[#111c2d]">{product.name}</p>
-                          <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#006d2f]">
-                            ✦ {product.compatibility ? "IA Otimizado" : "Manual"}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-[#6c7b6b]">{product.sku || "Sem SKU"}</td>
-                    <td className="px-6 py-4 text-sm text-[#111c2d]">{product.category}</td>
-                    <td className="px-6 py-4 text-sm font-bold text-[#111c2d]">
-                      R$ {product.price.toFixed(2).replace(".", ",")}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm text-[#111c2d]">{product.stockQuantity} un.</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-[0.06em] ${product.stockQuantity <= 3 ? "text-[#ba1a1a]" : "text-[#006d2f]"}`}>
-                          {product.stockQuantity <= 3 ? "Estoque baixo" : "Estoque OK"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button className="rounded-lg bg-[#dee8ff] px-3 py-2 text-xs font-semibold text-[#3c4a3d] transition hover:bg-[#d8e3fb]">
-                          Editar
-                        </button>
-                        <button className="rounded-full p-2 text-[#6c7b6b] transition hover:bg-[#dee8ff]">
-                          ⋮
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredDesktopProducts.map((product) => {
+                  const isExpanded = expandedDesktopProductIds.includes(product.id);
+
+                  return (
+                    <Fragment key={product.id}>
+                      <tr key={product.id} className="group hover:bg-[#f9f9ff]">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e7eeff] font-bold text-[#006d2f]">
+                              {product.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-[#111c2d]">{product.name}</p>
+                              <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#006d2f]">
+                                ✦ {product.compatibility ? "IA Otimizado" : "Manual"}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#6c7b6b]">{product.sku || "Sem SKU"}</td>
+                        <td className="px-6 py-4 text-sm text-[#111c2d]">{product.category}</td>
+                        <td className="px-6 py-4 text-sm font-bold text-[#111c2d]">
+                          R$ {product.price.toFixed(2).replace(".", ",")}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm text-[#111c2d]">{product.stockQuantity} un.</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-[0.06em] ${product.stockQuantity <= 3 ? "text-[#ba1a1a]" : "text-[#006d2f]"}`}>
+                              {product.stockQuantity <= 3 ? "Estoque baixo" : "Estoque OK"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => toggleDesktopProduct(product.id)}
+                              className="rounded-lg bg-[#dee8ff] px-3 py-2 text-xs font-semibold text-[#3c4a3d] transition hover:bg-[#d8e3fb]"
+                            >
+                              {isExpanded ? "Fechar" : "Editar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleDesktopProduct(product.id)}
+                              className="rounded-full p-2 text-[#6c7b6b] transition hover:bg-[#dee8ff]"
+                            >
+                              {isExpanded ? "−" : "⋮"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded ? (
+                        <tr className="bg-[#f9fbff]">
+                          <td colSpan={6} className="px-6 py-5">
+                            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                              <div className="rounded-2xl border border-[#bbcbb9]/20 bg-white p-4">
+                                <p className="text-sm font-semibold text-[#111c2d]">
+                                  Ajustes rápidos do produto
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[#5f6f67]">
+                                  Edite preço, estoque e status sem sair da tabela. Ideal para correções rápidas no dia a dia da operação.
+                                </p>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                  <span className="rounded-full bg-[#edf9ff] px-3 py-1 text-[11px] font-semibold text-[#00668a]">
+                                    {product.category}
+                                  </span>
+                                  {product.compatibility ? (
+                                    <span className="rounded-full bg-[#eefaf0] px-3 py-1 text-[11px] font-semibold text-[#2d8a4b]">
+                                      {product.compatibility}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="rounded-2xl border border-[#bbcbb9]/20 bg-white p-4">
+                                <ProductStockForm
+                                  productId={product.id}
+                                  initialActive={product.active}
+                                  initialPrice={product.price}
+                                  initialStockQuantity={product.stockQuantity}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

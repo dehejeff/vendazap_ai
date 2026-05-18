@@ -21,7 +21,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="dashboard-shell dashboard-grid min-h-screen text-[#163322]">
-      <DashboardSidebar />
+      <DashboardSidebar storeName={session.storeName} />
 
       <div className="md:ml-64">
         <div className="border-b border-[#e1e3e4] bg-[rgba(248,250,251,0.92)] md:hidden">

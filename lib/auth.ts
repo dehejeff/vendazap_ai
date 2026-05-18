@@ -2,6 +2,8 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypt
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDataFilePath } from "@/lib/storage-path";
+import { isSupabaseServerConfigured } from "@/lib/supabase/config";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const AUTH_COOKIE_NAME = "vendazap_session";
 
@@ -21,6 +23,24 @@ type StoredUser = {
   whatsappDisplayNumber?: string;
   whatsappWebhookReady?: boolean;
   whatsappNumber?: string;
+};
+
+type SupabaseUserRow = {
+  created_at: string;
+  email: string;
+  id: string;
+  niche: string | null;
+  name: string;
+  onboarding_completed: boolean;
+  password_hash: string;
+  phone: string | null;
+  store_name: string;
+  whatsapp_access_token_hint: string | null;
+  whatsapp_business_phone_id: string | null;
+  whatsapp_connected: boolean;
+  whatsapp_display_number: string | null;
+  whatsapp_number: string | null;
+  whatsapp_webhook_ready: boolean;
 };
 
 type SessionPayload = {
@@ -69,6 +89,26 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function mapSupabaseUser(row: SupabaseUserRow): StoredUser {
+  return {
+    createdAt: row.created_at,
+    email: row.email,
+    id: row.id,
+    niche: row.niche ?? undefined,
+    name: row.name,
+    onboardingCompleted: row.onboarding_completed,
+    passwordHash: row.password_hash,
+    phone: row.phone ?? undefined,
+    storeName: row.store_name,
+    whatsappAccessTokenHint: row.whatsapp_access_token_hint ?? undefined,
+    whatsappBusinessPhoneId: row.whatsapp_business_phone_id ?? undefined,
+    whatsappConnected: row.whatsapp_connected,
+    whatsappDisplayNumber: row.whatsapp_display_number ?? undefined,
+    whatsappNumber: row.whatsapp_number ?? undefined,
+    whatsappWebhookReady: row.whatsapp_webhook_ready,
+  };
+}
+
 function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -92,6 +132,20 @@ function verifyPassword(password: string, storedHash: string) {
 }
 
 async function readUsers(): Promise<StoredUser[]> {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => mapSupabaseUser(row as SupabaseUserRow));
+  }
+
   const filePath = resolveUsersFilePath();
 
   try {
@@ -113,6 +167,37 @@ async function readUsers(): Promise<StoredUser[]> {
 }
 
 async function writeUsers(users: StoredUser[]) {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const payload = users.map((user) => ({
+      created_at: user.createdAt,
+      email: user.email,
+      id: user.id,
+      niche: user.niche ?? null,
+      name: user.name,
+      onboarding_completed: user.onboardingCompleted ?? false,
+      password_hash: user.passwordHash,
+      phone: user.phone ?? null,
+      store_name: user.storeName,
+      whatsapp_access_token_hint: user.whatsappAccessTokenHint ?? null,
+      whatsapp_business_phone_id: user.whatsappBusinessPhoneId ?? null,
+      whatsapp_connected: user.whatsappConnected ?? false,
+      whatsapp_display_number: user.whatsappDisplayNumber ?? null,
+      whatsapp_number: user.whatsappNumber ?? null,
+      whatsapp_webhook_ready: user.whatsappWebhookReady ?? false,
+    }));
+
+    const { error } = await supabase.from("users").upsert(payload, {
+      onConflict: "id",
+    });
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    return;
+  }
+
   const filePath = resolveUsersFilePath();
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(users, null, 2), "utf8");
@@ -165,7 +250,6 @@ export function validateLoginInput(input: LoginInput) {
 export async function registerUser(input: RegisterInput) {
   const normalized = validateRegisterInput(input);
   const users = await readUsers();
-
   const alreadyExists = users.some((user) => user.email === normalized.email);
 
   if (alreadyExists) {
@@ -256,6 +340,21 @@ export async function getTemporaryAccessSession() {
 }
 
 export async function getUserById(userId: string) {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    return data ? mapSupabaseUser(data as SupabaseUserRow) : null;
+  }
+
   const users = await readUsers();
   return users.find((user) => user.id === userId) ?? null;
 }
@@ -267,10 +366,23 @@ export async function getUserByWhatsappBusinessPhoneId(businessPhoneId: string) 
     return null;
   }
 
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("whatsapp_business_phone_id", normalizedId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    return data ? mapSupabaseUser(data as SupabaseUserRow) : null;
+  }
+
   const users = await readUsers();
-  return (
-    users.find((user) => user.whatsappBusinessPhoneId === normalizedId) ?? null
-  );
+  return users.find((user) => user.whatsappBusinessPhoneId === normalizedId) ?? null;
 }
 
 export function validateStoreProfileInput(input: StoreProfileInput) {
@@ -299,6 +411,33 @@ export function validateStoreProfileInput(input: StoreProfileInput) {
 
 export async function updateStoreProfile(input: StoreProfileInput) {
   const normalized = validateStoreProfileInput(input);
+
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        niche: normalized.niche,
+        onboarding_completed: true,
+        phone: normalized.phone || null,
+        store_name: normalized.storeName,
+        whatsapp_number: normalized.whatsappNumber || null,
+      })
+      .eq("id", normalized.userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Usuário não encontrado.");
+    }
+
+    return mapSupabaseUser(data as SupabaseUserRow);
+  }
+
   const users = await readUsers();
   const userIndex = users.findIndex((user) => user.id === normalized.userId);
 
@@ -340,6 +479,33 @@ export function validateWhatsappConfigInput(input: WhatsappConfigInput) {
 
 export async function updateWhatsappConfig(input: WhatsappConfigInput) {
   const normalized = validateWhatsappConfigInput(input);
+
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        whatsapp_access_token_hint: normalized.accessTokenHint || null,
+        whatsapp_business_phone_id: normalized.businessPhoneId || null,
+        whatsapp_connected: normalized.connected,
+        whatsapp_display_number: normalized.displayNumber || null,
+        whatsapp_webhook_ready: normalized.webhookReady,
+      })
+      .eq("id", normalized.userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase users: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Usuário não encontrado.");
+    }
+
+    return mapSupabaseUser(data as SupabaseUserRow);
+  }
+
   const users = await readUsers();
   const userIndex = users.findIndex((user) => user.id === normalized.userId);
 

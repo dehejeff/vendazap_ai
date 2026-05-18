@@ -38,9 +38,7 @@ export function ConversationsWorkspace({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todas");
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>("todas");
-  const [expandedConversationIds, setExpandedConversationIds] = useState<string[]>(
-    () => conversations.slice(0, 1).map((conversation) => conversation.id),
-  );
+  const [expandedConversationIds, setExpandedConversationIds] = useState<string[]>([]);
 
   const filteredConversations = useMemo(() => {
     const normalizedSearch = normalizeText(search.trim());

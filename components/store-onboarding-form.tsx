@@ -21,6 +21,24 @@ type StoreOnboardingFormProps = {
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
+function formatBrazilPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length <= 2) {
+    return digits ? `(${digits}` : "";
+  }
+
+  if (digits.length <= 3) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+
+  if (digits.length <= 7) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export function StoreOnboardingForm({
   initialNiche = "",
   initialPhone = "",
@@ -30,6 +48,10 @@ export function StoreOnboardingForm({
   const router = useRouter();
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
+  const [phone, setPhone] = useState(() => formatBrazilPhone(initialPhone));
+  const [whatsappNumber, setWhatsappNumber] = useState(() =>
+    formatBrazilPhone(initialWhatsappNumber),
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,7 +128,9 @@ export function StoreOnboardingForm({
         <input
           name="phone"
           type="text"
-          defaultValue={initialPhone}
+          inputMode="numeric"
+          value={phone}
+          onChange={(event) => setPhone(formatBrazilPhone(event.target.value))}
           placeholder="Telefone da loja"
           className="w-full rounded-xl border border-[#bacbbc]/30 bg-white px-4 py-3 text-sm text-[#191c1d] outline-none placeholder:text-[#6b7b6e]"
         />
@@ -114,7 +138,11 @@ export function StoreOnboardingForm({
         <input
           name="whatsappNumber"
           type="text"
-          defaultValue={initialWhatsappNumber}
+          inputMode="numeric"
+          value={whatsappNumber}
+          onChange={(event) =>
+            setWhatsappNumber(formatBrazilPhone(event.target.value))
+          }
           placeholder="WhatsApp principal"
           className="w-full rounded-xl border border-[#bacbbc]/30 bg-white px-4 py-3 text-sm text-[#191c1d] outline-none placeholder:text-[#6b7b6e]"
         />

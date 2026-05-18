@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDataFilePath } from "@/lib/storage-path";
+import { isSupabaseServerConfigured } from "@/lib/supabase/config";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ProductInput = {
   category: string;
@@ -34,6 +36,21 @@ export type StoredProduct = {
   stockQuantity: number;
   updatedAt: string;
   userId: string;
+};
+
+type SupabaseProductRow = {
+  active: boolean;
+  category: string;
+  compatibility: string | null;
+  created_at: string;
+  description: string;
+  id: string;
+  name: string;
+  price: number | string;
+  sku: string | null;
+  stock_quantity: number;
+  updated_at: string;
+  user_id: string;
 };
 
 const sampleMotorcycleProducts = [
@@ -83,7 +100,38 @@ function resolveProductsFilePath() {
   return resolveDataFilePath(process.env.PRODUCTS_FILE_PATH, "products.json");
 }
 
+function mapSupabaseProduct(row: SupabaseProductRow): StoredProduct {
+  return {
+    active: row.active,
+    category: row.category,
+    compatibility: row.compatibility ?? undefined,
+    createdAt: row.created_at,
+    description: row.description,
+    id: row.id,
+    name: row.name,
+    price: Number(row.price),
+    sku: row.sku ?? undefined,
+    stockQuantity: row.stock_quantity,
+    updatedAt: row.updated_at,
+    userId: row.user_id,
+  };
+}
+
 async function readProducts(): Promise<StoredProduct[]> {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => mapSupabaseProduct(row as SupabaseProductRow));
+  }
+
   const filePath = resolveProductsFilePath();
 
   try {
@@ -105,6 +153,34 @@ async function readProducts(): Promise<StoredProduct[]> {
 }
 
 async function writeProducts(products: StoredProduct[]) {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const payload = products.map((product) => ({
+      active: product.active,
+      category: product.category,
+      compatibility: product.compatibility ?? null,
+      created_at: product.createdAt,
+      description: product.description,
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      sku: product.sku ?? null,
+      stock_quantity: product.stockQuantity,
+      updated_at: product.updatedAt,
+      user_id: product.userId,
+    }));
+
+    const { error } = await supabase.from("products").upsert(payload, {
+      onConflict: "id",
+    });
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    return;
+  }
+
   const filePath = resolveProductsFilePath();
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(products, null, 2), "utf8");
@@ -179,6 +255,21 @@ export function validateProductUpdateInput(input: ProductUpdateInput) {
 }
 
 export async function listProductsByUserId(userId: string) {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => mapSupabaseProduct(row as SupabaseProductRow));
+  }
+
   const products = await readProducts();
   return products
     .filter((product) => product.userId === userId)
@@ -199,6 +290,22 @@ export function getSampleProductsForUser(userId: string): StoredProduct[] {
 }
 
 export async function getProductById(productId: string, userId: string) {
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", productId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    return data ? mapSupabaseProduct(data as SupabaseProductRow) : null;
+  }
+
   const products = await readProducts();
   return (
     products.find(
@@ -209,7 +316,6 @@ export async function getProductById(productId: string, userId: string) {
 
 export async function createProduct(input: ProductInput) {
   const normalized = validateProductInput(input);
-  const products = await readProducts();
   const timestamp = new Date().toISOString();
 
   const product: StoredProduct = {
@@ -227,6 +333,39 @@ export async function createProduct(input: ProductInput) {
     updatedAt: timestamp,
   };
 
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        active: product.active,
+        category: product.category,
+        compatibility: product.compatibility ?? null,
+        created_at: product.createdAt,
+        description: product.description,
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        sku: product.sku ?? null,
+        stock_quantity: product.stockQuantity,
+        updated_at: product.updatedAt,
+        user_id: product.userId,
+      })
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Não foi possível salvar o produto.");
+    }
+
+    return mapSupabaseProduct(data as SupabaseProductRow);
+  }
+
+  const products = await readProducts();
   products.push(product);
   await writeProducts(products);
 
@@ -235,16 +374,11 @@ export async function createProduct(input: ProductInput) {
 
 export async function updateProduct(productId: string, input: ProductUpdateInput) {
   const normalized = validateProductUpdateInput(input);
-  const products = await readProducts();
-  const productIndex = products.findIndex(
-    (product) => product.id === productId && product.userId === normalized.userId,
-  );
+  const currentProduct = await getProductById(productId, normalized.userId);
 
-  if (productIndex === -1) {
+  if (!currentProduct) {
     throw new Error("Produto não encontrado.");
   }
-
-  const currentProduct = products[productIndex];
 
   const updatedProduct: StoredProduct = {
     ...currentProduct,
@@ -263,6 +397,36 @@ export async function updateProduct(productId: string, input: ProductUpdateInput
     updatedAt: new Date().toISOString(),
   };
 
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        active: updatedProduct.active,
+        price: updatedProduct.price,
+        stock_quantity: updatedProduct.stockQuantity,
+        updated_at: updatedProduct.updatedAt,
+      })
+      .eq("id", productId)
+      .eq("user_id", normalized.userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Produto não encontrado.");
+    }
+
+    return mapSupabaseProduct(data as SupabaseProductRow);
+  }
+
+  const products = await readProducts();
+  const productIndex = products.findIndex(
+    (product) => product.id === productId && product.userId === normalized.userId,
+  );
   products[productIndex] = updatedProduct;
   await writeProducts(products);
 
@@ -270,16 +434,11 @@ export async function updateProduct(productId: string, input: ProductUpdateInput
 }
 
 export async function reserveProductStock(productId: string, userId: string) {
-  const products = await readProducts();
-  const productIndex = products.findIndex(
-    (product) => product.id === productId && product.userId === userId,
-  );
+  const currentProduct = await getProductById(productId, userId);
 
-  if (productIndex === -1) {
+  if (!currentProduct) {
     throw new Error("Produto não encontrado.");
   }
-
-  const currentProduct = products[productIndex];
 
   if (!currentProduct.active) {
     throw new Error("O produto está inativo e não pode ser reservado.");
@@ -295,6 +454,34 @@ export async function reserveProductStock(productId: string, userId: string) {
     updatedAt: new Date().toISOString(),
   };
 
+  if (isSupabaseServerConfigured()) {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        stock_quantity: updatedProduct.stockQuantity,
+        updated_at: updatedProduct.updatedAt,
+      })
+      .eq("id", productId)
+      .eq("user_id", userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Supabase products: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error("Produto não encontrado.");
+    }
+
+    return mapSupabaseProduct(data as SupabaseProductRow);
+  }
+
+  const products = await readProducts();
+  const productIndex = products.findIndex(
+    (product) => product.id === productId && product.userId === userId,
+  );
   products[productIndex] = updatedProduct;
   await writeProducts(products);
 
